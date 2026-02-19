@@ -1,8 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { IndianRupee, TrendingUp, CalendarCheck } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from "recharts";
+
 import { getEarnings } from "@/lib/api";
 import { StatsCard } from "@/components/stats-card";
 import {
@@ -14,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 
 const chartConfig = {
   earnings: {
@@ -23,38 +33,47 @@ const chartConfig = {
 };
 
 export default function EarningsPage() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadEarnings();
-  }, []);
+    if (!isLoaded) return;
+
+    if (isSignedIn) {
+      loadEarnings();
+    } else {
+      setLoading(false);
+    }
+  }, [isLoaded, isSignedIn]);
 
   async function loadEarnings() {
     try {
-      const res = await getEarnings();
-      setData(res.data);
+      const token = await getToken();
+
+      if (!token) {
+        toast.error("Authentication failed");
+        return;
+      }
+
+      const res = await getEarnings(token);
+      setData(res);
+    } catch (err) {
+      console.error(err?.response?.data || err);
+      toast.error("Failed to load earnings");
     } finally {
       setLoading(false);
     }
   }
 
+  if (!isLoaded) return null;
+  if (!isSignedIn) return <p>Please sign in</p>;
+
   if (loading) {
     return (
       <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Earnings
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Track your revenue and booking value.
-          </p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-[100px] rounded-xl" />
-          ))}
-        </div>
+        <Skeleton className="h-[100px] rounded-xl" />
         <Skeleton className="h-[350px] rounded-xl" />
       </div>
     );
@@ -75,19 +94,21 @@ export default function EarningsPage() {
         <StatsCard
           icon={IndianRupee}
           title="This Month"
-          value={`\u20B9${data?.monthlyEarnings?.toLocaleString() || 0}`}
-          description="February 2026"
+          value={`₹${data?.monthlyEarnings?.toLocaleString() || 0}`}
+          description="Current month revenue"
         />
+
         <StatsCard
           icon={TrendingUp}
           title="Total Earnings"
-          value={`\u20B9${data?.totalEarnings?.toLocaleString() || 0}`}
+          value={`₹${data?.totalEarnings?.toLocaleString() || 0}`}
           description="Lifetime revenue"
         />
+
         <StatsCard
           icon={CalendarCheck}
           title="Avg. Booking Value"
-          value={`\u20B9${data?.averageBookingValue || 0}`}
+          value={`₹${data?.averageBookingValue || 0}`}
           description="Per booking"
         />
       </div>
@@ -99,12 +120,13 @@ export default function EarningsPage() {
             Revenue breakdown for the last 6 months
           </CardDescription>
         </CardHeader>
+
         <CardContent>
           <ChartContainer config={chartConfig} className="h-[350px] w-full">
-            <BarChart data={data?.monthly || []} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+            <BarChart data={data?.monthly || []}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="month" tickLine={false} axisLine={false} />
-              <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => `\u20B9${v / 1000}k`} />
+              <XAxis dataKey="month" />
+              <YAxis />
               <Tooltip content={<ChartTooltipContent />} />
               <Bar
                 dataKey="earnings"

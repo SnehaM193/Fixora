@@ -1,234 +1,264 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+
 import {
-  User,
-  Phone,
-  MapPin,
-  Mail,
-  IndianRupee,
-  Briefcase,
-  Clock,
-  Wrench,
-} from "lucide-react";
-import { getVendorProfile, updateVendorProfile } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+  createVendorProfile,
+  updateVendorProfile,
+  getVendorProfile,
+} from "@/lib/api";
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Textarea } from "@/components/ui/textarea";
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function VendorProfilePage() {
-  const [profile, setProfile] = useState(null);
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const router = useRouter();
+
+  const [profile, setProfile] = useState({
+    _id: null,
+    businessName: "",
+    serviceType: "",
+    phone: "",
+    address: "",
+    pricePerVisit: "",
+    description: "",
+  });
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    loadProfile();
-  }, []);
+    if (isLoaded && isSignedIn) loadProfile();
+  }, [isLoaded, isSignedIn]);
 
   async function loadProfile() {
     try {
-      const res = await getVendorProfile();
-      setProfile(res.data);
+      const token = await getToken();
+      if (!token) return;
+
+      const data = await getVendorProfile(token);
+
+      if (data) {
+        setProfile({
+          _id: data._id,
+          businessName: data.businessName || "",
+          serviceType: data.serviceType || "",
+          phone: data.phone || "",
+          address: data.address || "",
+          pricePerVisit: data.pricePerVisit || "",
+          description: data.description || "",
+        });
+      }
+    } catch {
+      // No profile yet
     } finally {
       setLoading(false);
     }
   }
 
+  function handleChange(field, value) {
+    setProfile((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }
+
   async function handleSave(e) {
     e.preventDefault();
+
+    if (!profile.serviceType) {
+      toast.error("Please select a service type");
+      return;
+    }
+
+    if (!profile.phone || !profile.address || !profile.pricePerVisit) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+
     setSaving(true);
+
     try {
-      await updateVendorProfile(profile);
-      toast.success("Profile updated successfully");
-    } catch {
-      toast.error("Failed to update profile");
+      const token = await getToken();
+      const { _id, ...payload } = profile;
+
+      payload.pricePerVisit = Number(payload.pricePerVisit);
+
+      if (_id) {
+        await updateVendorProfile(payload, token);
+        toast.success("Profile updated successfully!");
+      } else {
+        await createVendorProfile(payload, token);
+        toast.success("You are now a Vendor!");
+      }
+
+      router.push("/vendor");
+    } catch (err) {
+      toast.error("Failed to save profile");
     } finally {
       setSaving(false);
     }
   }
 
-  function handleChange(field, value) {
-    setProfile((prev) => ({ ...prev, [field]: value }));
-  }
-
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Vendor Profile
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Manage your business details and service information.
-          </p>
-        </div>
-        <Skeleton className="h-[600px] rounded-xl" />
-      </div>
-    );
-  }
-
-  const initials = profile?.name
-    ? profile.name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-    : "V";
+  if (!isLoaded) return null;
+  if (!isSignedIn) return <p className="p-6">Please sign in</p>;
+  if (loading) return <p className="p-6">Loading...</p>;
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+    <div className="mx-auto max-w-4xl space-y-10 p-8">
+      
+      {/* HEADER */}
+      <div className="space-y-2">
+        <h1 className="text-3xl font-semibold tracking-tight">
           Vendor Profile
         </h1>
-        <p className="text-sm text-muted-foreground">
-          Manage your business details and service information.
+        <p className="text-muted-foreground text-base">
+          Set up your professional service profile to start receiving bookings.
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Personal Info */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-4">
-              <Avatar className="h-16 w-16">
-                <AvatarFallback className="bg-primary/10 text-lg font-bold text-primary">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <CardTitle>{profile?.name}</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {profile?.email}
-                </p>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSave} className="flex flex-col gap-5">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="name" className="flex items-center gap-1.5">
-                  <User className="h-4 w-4" />
-                  Full Name
-                </Label>
-                <Input
-                  id="name"
-                  value={profile?.name || ""}
-                  onChange={(e) => handleChange("name", e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="email" className="flex items-center gap-1.5">
-                  <Mail className="h-4 w-4" />
-                  Email
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={profile?.email || ""}
-                  onChange={(e) => handleChange("email", e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="phone" className="flex items-center gap-1.5">
-                  <Phone className="h-4 w-4" />
-                  Phone
-                </Label>
-                <Input
-                  id="phone"
-                  value={profile?.phone || ""}
-                  onChange={(e) => handleChange("phone", e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="address" className="flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4" />
-                  Address
-                </Label>
-                <Input
-                  id="address"
-                  value={profile?.address || ""}
-                  onChange={(e) => handleChange("address", e.target.value)}
-                />
-              </div>
-              <Button type="submit" className="self-start" disabled={saving}>
-                {saving ? "Saving..." : "Save Changes"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+      {/* CARD */}
+      <Card className="border-border/60 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-xl">Business Information</CardTitle>
+          <CardDescription>
+            This information will be visible to customers.
+          </CardDescription>
+        </CardHeader>
 
-        {/* Business Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Business Information</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2">
-              <Label className="flex items-center gap-1.5">
-                <Wrench className="h-4 w-4" />
-                Services Offered
-              </Label>
-              <div className="flex flex-wrap gap-2">
-                {(profile?.servicesOffered || []).map((svc) => (
-                  <Badge key={svc} variant="secondary">
-                    {svc}
-                  </Badge>
-                ))}
+        <CardContent>
+          <form onSubmit={handleSave} className="space-y-8">
+
+            {/* Business Name */}
+            <div className="space-y-2">
+              <Label>Business Name</Label>
+              <Input
+                value={profile.businessName}
+                onChange={(e) =>
+                  handleChange("businessName", e.target.value)
+                }
+                placeholder="e.g. Elite Plumbing Services"
+                className="h-11"
+                required
+              />
+            </div>
+
+            {/* Service Type */}
+            <div className="space-y-2">
+              <Label>Service Type</Label>
+              <Select
+                value={profile.serviceType}
+                onValueChange={(value) =>
+                  handleChange("serviceType", value)
+                }
+              >
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Select service type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="plumbing">Plumbing</SelectItem>
+                  <SelectItem value="electrical">Electrical</SelectItem>
+                  <SelectItem value="ac">AC Repair</SelectItem>
+                  <SelectItem value="appliance">Appliance Repair</SelectItem>
+                  <SelectItem value="carpentry">Carpentry</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Phone & Price */}
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Phone Number</Label>
+                <Input
+                  value={profile.phone}
+                  onChange={(e) =>
+                    handleChange("phone", e.target.value)
+                  }
+                  placeholder="Enter phone number"
+                  className="h-11"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Price Per Visit (₹)</Label>
+                <Input
+                  type="number"
+                  value={profile.pricePerVisit}
+                  onChange={(e) =>
+                    handleChange("pricePerVisit", e.target.value)
+                  }
+                  placeholder="Enter price"
+                  className="h-11"
+                  required
+                />
               </div>
             </div>
-            <div className="flex flex-col gap-2">
-              <Label
-                htmlFor="pricePerHour"
-                className="flex items-center gap-1.5"
-              >
-                <IndianRupee className="h-4 w-4" />
-                Price Per Visit
-              </Label>
+
+            {/* Address */}
+            <div className="space-y-2">
+              <Label>Service Address</Label>
               <Input
-                id="pricePerHour"
-                type="number"
-                value={profile?.pricePerHour || ""}
+                value={profile.address}
                 onChange={(e) =>
-                  handleChange("pricePerHour", Number(e.target.value))
+                  handleChange("address", e.target.value)
                 }
+                placeholder="Enter service location"
+                className="h-11"
+                required
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label
-                htmlFor="experience"
-                className="flex items-center gap-1.5"
+
+            {/* Description */}
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={profile.description}
+                onChange={(e) =>
+                  handleChange("description", e.target.value)
+                }
+                placeholder="Describe your services, experience, and expertise..."
+                rows={4}
+              />
+            </div>
+
+            {/* Submit */}
+            <div className="pt-4">
+              <Button
+                type="submit"
+                size="lg"
+                disabled={saving}
+                className="px-8"
               >
-                <Briefcase className="h-4 w-4" />
-                Experience
-              </Label>
-              <Input
-                id="experience"
-                value={profile?.experience || ""}
-                onChange={(e) => handleChange("experience", e.target.value)}
-              />
+                {saving ? "Saving..." : "Save Profile"}
+              </Button>
             </div>
-            <div className="flex flex-col gap-2">
-              <Label
-                htmlFor="availability"
-                className="flex items-center gap-1.5"
-              >
-                <Clock className="h-4 w-4" />
-                Availability
-              </Label>
-              <Input
-                id="availability"
-                value={profile?.availability || ""}
-                onChange={(e) => handleChange("availability", e.target.value)}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

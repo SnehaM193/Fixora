@@ -1,25 +1,60 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { toast } from "sonner";
-import { getVendorBookings, updateBookingStatus } from "@/lib/api";
+import {
+  getVendorBookings,
+  updateBookingStatus,
+} from "@/lib/api";
 import { BookingTable } from "@/components/booking-table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 
 export default function ManageBookingsPage() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadBookings();
-  }, []);
+    if (!isLoaded) return;
+
+    if (isSignedIn) {
+      loadBookings();
+    } else {
+      setLoading(false);
+    }
+  }, [isLoaded, isSignedIn]);
 
   async function loadBookings() {
     try {
-      const res = await getVendorBookings();
-      setBookings(res.data);
+      setLoading(true);
+
+      const token = await getToken();
+
+      if (!token) {
+        toast.error("Authentication failed");
+        return;
+      }
+
+      const data = await getVendorBookings(token);
+
+      setBookings(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Vendor bookings error:", err?.response?.data || err);
+      toast.error("Failed to load bookings");
     } finally {
       setLoading(false);
     }
@@ -31,13 +66,47 @@ export default function ManageBookingsPage() {
       reject: "Cancelled",
       complete: "Completed",
     };
-    const status = statusMap[action];
-    if (status) {
-      await updateBookingStatus(bookingId, status);
-      toast.success(`Booking ${action}ed successfully`);
-      setLoading(true);
-      loadBookings();
+
+    const newStatus = statusMap[action];
+
+    if (!newStatus) return;
+
+    try {
+      const token = await getToken();
+
+      if (!token) {
+        toast.error("Authentication failed");
+        return;
+      }
+
+      await updateBookingStatus(bookingId, newStatus, token);
+
+      toast.success(`Booking marked as ${newStatus}`);
+
+      // update UI immediately without refetch
+      setBookings((prev) =>
+        prev.map((b) =>
+          b._id === bookingId ? { ...b, status: newStatus } : b
+        )
+      );
+    } catch (err) {
+      console.error("Update booking error:", err?.response?.data || err);
+      toast.error("Failed to update booking");
     }
+  }
+
+  if (!isLoaded) return null;
+
+  if (!isSignedIn) {
+    return <p>Please sign in to manage bookings.</p>;
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-[500px] rounded-xl" />
+      </div>
+    );
   }
 
   const pending = bookings.filter((b) => b.status === "Pending");
@@ -47,32 +116,9 @@ export default function ManageBookingsPage() {
   const completed = bookings.filter((b) => b.status === "Completed");
   const cancelled = bookings.filter((b) => b.status === "Cancelled");
 
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Manage Bookings
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Accept, reject, or complete incoming booking requests.
-          </p>
-        </div>
-        <Skeleton className="h-[500px] rounded-xl" />
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Manage Bookings
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Accept, reject, or complete incoming booking requests.
-        </p>
-      </div>
+      <h1 className="text-2xl font-bold">Manage Bookings</h1>
 
       <Tabs defaultValue="pending">
         <TabsList>

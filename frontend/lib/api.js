@@ -1,105 +1,130 @@
-import {
-  services,
-  vendors,
-  userBookings,
-  vendorBookings,
-  earningsData,
-  analyticsData,
-  userProfile,
-  vendorProfile,
-} from "./mock-data";
+import axios from "axios";
 
-// Simulates async API calls - swap these with real Axios calls when backend is ready
-// import axios from "axios";
-// const api = axios.create({ baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api" });
+const api = axios.create({
+  baseURL: "http://localhost:5000/api",
+  withCredentials: true,
+});
 
-function delay(ms = 300) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+// =====================================================
+// 🔥 ROLE DETECTION (IMPORTANT)
+// =====================================================
 
-// ── Services ───────────────────────────────────────────────
-export async function getServices() {
-  await delay();
-  return { data: services };
-}
+export const getUserRole = async (token) => {
+  try {
+    await api.get("/vendors/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-// ── Vendors ────────────────────────────────────────────────
-export async function getVendors(serviceId) {
-  await delay();
-  const filtered = serviceId
-    ? vendors.filter((v) => v.serviceId === serviceId)
-    : vendors;
-  return { data: filtered };
-}
+    // If vendor profile exists
+    return "vendor";
+  } catch (err) {
+    if (err.response?.status === 404) {
+      // No vendor profile = customer
+      return "customer";
+    }
 
-// ── User Bookings ──────────────────────────────────────────
-export async function getBookings() {
-  await delay();
-  return { data: userBookings };
-}
+    throw err;
+  }
+};
 
-export async function createBooking(bookingData) {
-  await delay(500);
-  const newBooking = {
-    id: `bk-${Date.now()}`,
-    ...bookingData,
-    status: "Pending",
-  };
-  userBookings.unshift(newBooking);
-  return { data: newBooking };
-}
+// =====================================================
+// CUSTOMER APIs
+// =====================================================
 
-export async function cancelBooking(bookingId) {
-  await delay(400);
-  const booking = userBookings.find((b) => b.id === bookingId);
-  if (booking) booking.status = "Cancelled";
-  return { data: booking };
-}
+// CREATE BOOKING
+export const createBooking = async (data, token) => {
+  const res = await api.post("/bookings", data, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
 
-// ── Vendor Bookings ────────────────────────────────────────
-export async function getVendorBookings() {
-  await delay();
-  return { data: vendorBookings };
-}
+// GET USER BOOKINGS
+export const getBookings = async (token) => {
+  const res = await api.get("/bookings/user", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return Array.isArray(res.data) ? res.data : [];
+};
 
-export async function updateBookingStatus(bookingId, status) {
-  await delay(400);
-  const booking = vendorBookings.find((b) => b.id === bookingId);
-  if (booking) booking.status = status;
-  return { data: booking };
-}
+// CANCEL BOOKING
+export const cancelBooking = async (id, token) => {
+  const res = await api.patch(
+    `/bookings/${id}`,
+    { status: "Cancelled" },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  return res.data;
+};
 
-// ── Earnings ───────────────────────────────────────────────
-export async function getEarnings() {
-  await delay();
-  return { data: earningsData };
-}
+// =====================================================
+// PUBLIC VENDOR APIs
+// =====================================================
 
-// ── Analytics ──────────────────────────────────────────────
-export async function getAnalytics() {
-  await delay();
-  return { data: analyticsData };
-}
+export const getAllVendors = async () => {
+  const res = await api.get("/vendors");
+  return Array.isArray(res.data) ? res.data : [];
+};
 
-// ── Profiles ───────────────────────────────────────────────
-export async function getUserProfile() {
-  await delay();
-  return { data: userProfile };
-}
+// =====================================================
+// VENDOR BOOKING APIs
+// =====================================================
 
-export async function getVendorProfile() {
-  await delay();
-  return { data: vendorProfile };
-}
+export const getVendorBookings = async (token) => {
+  const res = await api.get("/bookings/vendor", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return Array.isArray(res.data) ? res.data : [];
+};
 
-export async function updateUserProfile(profileData) {
-  await delay(500);
-  Object.assign(userProfile, profileData);
-  return { data: userProfile };
-}
+export const updateBookingStatus = async (id, status, token) => {
+  const res = await api.patch(
+    `/bookings/${id}`,
+    { status },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  return res.data;
+};
 
-export async function updateVendorProfile(profileData) {
-  await delay(500);
-  Object.assign(vendorProfile, profileData);
-  return { data: vendorProfile };
-}
+export const getEarnings = async (token) => {
+  const res = await api.get("/bookings/vendor/earnings", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const getAnalytics = async (token) => {
+  const res = await api.get("/bookings/vendor/analytics", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+// =====================================================
+// VENDOR PROFILE APIs
+// =====================================================
+
+export const createVendorProfile = async (data, token) => {
+  const res = await api.post("/vendors", data, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const updateVendorProfile = async (data, token) => {
+  const res = await api.put("/vendors/me", data, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const getVendorProfile = async (token) => {
+  const res = await api.get("/vendors/me", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
