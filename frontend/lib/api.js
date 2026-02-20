@@ -7,15 +7,121 @@ const api = axios.create({
   },
 });
 
-// Attach token automatically
-export const attachToken = (getToken) => {
-  api.interceptors.request.use(async (config) => {
-    const token = await getToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+// =====================================================
+// ROLE DETECTION
+// =====================================================
+
+export const getUserRole = async (token) => {
+  try {
+    await api.get("/vendors/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return "vendor";
+  } catch (err) {
+    if (err.response?.status === 404) {
+      return "customer";
     }
-    return config;
+    throw err;
+  }
+};
+
+// =====================================================
+// CUSTOMER APIs
+// =====================================================
+
+export const createBooking = async (data, token) => {
+  const res = await api.post("/bookings", data, {
+    headers: { Authorization: `Bearer ${token}` },
   });
+  return res.data;
+};
+
+export const getBookings = async (token) => {
+  const res = await api.get("/bookings/user", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const cancelBooking = async (id, token) => {
+  const res = await api.patch(
+    `/bookings/${id}`,
+    { status: "Cancelled" },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  return res.data;
+};
+
+// =====================================================
+// PUBLIC VENDOR APIs
+// =====================================================
+
+export const getAllVendors = async () => {
+  const res = await api.get("/vendors");
+  return res.data;
+};
+
+// =====================================================
+// VENDOR BOOKING APIs
+// =====================================================
+
+export const getVendorBookings = async (token) => {
+  const res = await api.get("/bookings/vendor", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const updateBookingStatus = async (id, status, token) => {
+  const res = await api.patch(
+    `/bookings/${id}`,
+    { status },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  return res.data;
+};
+
+export const getEarnings = async (token) => {
+  const res = await api.get("/bookings/vendor/earnings", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const getAnalytics = async (token) => {
+  const res = await api.get("/bookings/vendor/analytics", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+// =====================================================
+// VENDOR PROFILE APIs
+// =====================================================
+
+export const createVendorProfile = async (data, token) => {
+  const res = await api.post("/vendors", data, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const updateVendorProfile = async (data, token) => {
+  const res = await api.put("/vendors/me", data, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
+};
+
+export const getVendorProfile = async (token) => {
+  const res = await api.get("/vendors/me", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data;
 };
 
 export default api;
